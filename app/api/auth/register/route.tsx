@@ -1,15 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
 import connectToDatabase from "@DB/utils/db";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { registerSchema } from "@DB/validations/auth";
-import createUsersSchema from "@DB/Sсhema/UserSсhema"; // Предполагается, что у вас есть модель User
+import createUsersSchema from "@DB/Sсhema/UserSсhema";
 
 export async function POST(request: Request) {
   try {
     const requestData = await request.json();
     const validationResult = registerSchema.safeParse(requestData);
-    
+
     if (!validationResult.success) {
       return NextResponse.json(
         { errors: validationResult.error.flatten() },
@@ -17,42 +17,32 @@ export async function POST(request: Request) {
       );
     }
 
-    const { email, password, username, avatarUrl, role } = validationResult.data;
+    const { email, password, username, avatarUrl, role } =
+      validationResult.data;
     const connection = await connectToDatabase();
     await createUsersSchema(connection);
 
-    const [existingEmail] = await connection.query(
-      'SELECT * FROM users WHERE email = ?', 
-      [email]
-    );
-    
-    const [existingUsername] = await connection.query(
-      'SELECT * FROM users WHERE username = ?', 
-      [username]
+    const [existingUser] = await connection.query(
+      "SELECT * FROM users WHERE email = ? OR username = ?",
+      [email, username]
     );
 
-    if (existingEmail.length > 0) {
+    if (existingUser.length > 0) {
+      const errorField = existingUser[0].email === email ? "email" : "username";
       return NextResponse.json(
-        { message: "Пользователь с таким email уже существует" },
-        { status: 400 }
-      );
-    }
-
-    if (existingUsername.length > 0) {
-      return NextResponse.json(
-        { message: "Пользователь с таким именем уже существует" },
+        { message: `Пользователь с таким ${errorField} уже существует` },
         { status: 400 }
       );
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
     const [result] = await connection.query(
-      'INSERT INTO users (username, email, password, avatarUrl, role) VALUES (?, ?, ?, ?, ?)',
-      [username, email, passwordHash, avatarUrl, role]
+      "INSERT INTO users (username, email, password, avatarUrl, role) VALUES (?, ?, ?, ?, ?)",
+      [username, email, passwordHash, avatarUrl?.trim() || null, role]
     );
 
     if (!process.env.JWT_SECRET) {
-      throw new Error('JWT_SECRET не настроен');
+      throw new Error("JWT_SECRET не настроен");
     }
 
     const token = jwt.sign(
@@ -61,18 +51,20 @@ export async function POST(request: Request) {
       { expiresIn: "30d" }
     );
 
-    return NextResponse.json({
-      message: "Пользователь успешно зарегистрирован",
-      user: {
-        id: result.insertId,
-        username,
-        email,
-        role,
-        avatarUrl
+    return NextResponse.json(
+      {
+        message: "Пользователь успешно зарегистрирован",
+        user: {
+          id: result.insertId,
+          username,
+          email,
+          role,
+          avatarUrl,
+        },
+        token,
       },
-      token
-    }, { status: 201 });
-
+      { status: 201 }
+    );
   } catch (error) {
     console.error("Ошибка регистрации:", error);
     return NextResponse.json(
