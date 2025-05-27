@@ -128,8 +128,8 @@ export default function SignUp() {
         role: "user",
       });
 
-      setErrorMessage("");
       setSuccessMessage("Регистрация прошла успешно! Теперь вы можете войти.");
+      setErrorMessage("");
 
       setTimeout(() => {
         dispatch(toggleAuth());

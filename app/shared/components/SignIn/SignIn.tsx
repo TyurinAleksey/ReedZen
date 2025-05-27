@@ -1,4 +1,6 @@
+import Success from "@app/shared/icons/Success";
 import { toggleAuth } from "@app/store/Slice/authSlice";
+import axios from "axios";
 import React, { useState } from "react";
 import { useDispatch } from "react-redux";
 
@@ -8,132 +10,191 @@ export default function SignIn() {
   const [password, setPassword] = useState("");
   const [emailError, setEmailError] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const [passwordRequirements, setPasswordRequirements] = useState({
-    length: false,
-    number: false,
-    lowercase: false,
-    uppercase: false,
-  });
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const validateEmail = () => {
-    if (email.length > 0) {
-      const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-      setEmailError(isValid ? "" : "Введите действительный email");
-      return isValid;
+    if (email.length === 0) {
+      setEmailError("");
+      return false;
     }
+
+    const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    setEmailError(isValid ? "" : "Введите действительный email");
+    return isValid;
   };
 
   const validatePassword = () => {
-    const hasLength = password.length >= 8;
-    const hasNumber = /\d/.test(password);
-    const hasLowercase = /[a-zа-яё]/.test(password);
-    const hasUppercase = /[A-ZА-ЯЁ]/.test(password);
-
-    setPasswordRequirements({
-      length: hasLength,
-      number: hasNumber,
-      lowercase: hasLowercase,
-      uppercase: hasUppercase,
-    });
-
-    if (password.length > 0) {
-      const isValid = hasLength && hasNumber && hasLowercase && hasLowercase;
-      setPasswordError(
-        isValid ? "" : "Пароль не соответствует требованиям, необходимо:"
-      );
-      return isValid;
+    if (password.length === 0) {
+      setPasswordError("");
+      return false;
     }
+
+    const isValid = password.length >= 8;
+    setPasswordError(
+      isValid ? "" : "Пароль должен содержать минимум 8 символов"
+    );
+    return isValid;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+
     const isEmailValid = validateEmail();
     const isPasswordValid = validatePassword();
 
-    if (isEmailValid && isPasswordValid) {
-      console.log("Форма валидна, можно отправлять");
+    if (!isEmailValid || !isPasswordValid) {
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const response = await axios.post("/api/auth/login", {
+        email,
+        password,
+      });
+
+      setSuccessMessage("Вы успешно авторизованы");
+
+      if (response.data.token) {
+        localStorage.setItem("authToken", response.data.token);
+        axios.defaults.headers.common["Authorization"] =
+          `Bearer ${response.data.token}`;
+      }
+
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 2000);
+    } catch (error) {
+      setPassword("");
+
+      if (axios.isAxiosError(error)) {
+        if (error.response) {
+          switch (error.response.status) {
+            case 401:
+              setErrorMessage("Неверный email или пароль");
+              break;
+            case 404:
+              setErrorMessage("Пользователь не найден");
+              break;
+            default:
+              setErrorMessage("Ошибка сервера");
+          }
+        } else {
+          setErrorMessage("Ошибка соединения с сервером");
+        }
+      } else {
+        setErrorMessage("Произошла непредвиденная ошибка");
+        console.error("Login error:", error);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
+
   return (
-    <div>
-      <form onSubmit={handleSubmit}>
-        <h3 className="text-lg p-4 font-bold text-center text-primary">
+    <div className="max-w-md mx-auto">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <h3 className="text-2xl font-bold text-center text-primary mb-6">
           Добро пожаловать!
         </h3>
-        <div className="space-y-4 py-8">
-          <div className="form-control">
-            <label className="label text-primary font-medium mb-2">Email</label>
-            <input
-              className={`input w-full ${emailError ? "input-error outline-error outline-2" : "outline-success outline-2"}`}
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onBlur={validateEmail}
-              title="Должно быть email"
-              placeholder="mail@site.com"
-              required
-            />
-            {emailError && (
-              <div className="text-error text-sm mt-1">{emailError}</div>
-            )}
+
+        {successMessage && (
+          <div className="alert alert-success">
+            <Success />
+            <span>{successMessage}</span>
           </div>
-          <div className="form-control">
-            <label className="label text-primary font-medium mb-2">
-              Пароль
-            </label>
-            <input
-              className={`input w-full ${passwordError ? "input-error outline-error outline-2" : "outline-success outline-2"}`}
-              type="password"
-              value={password}
-              onChange={(e) => {
-                setPassword(e.target.value);
-                if (passwordError) validatePassword();
-              }}
-              onBlur={validatePassword}
-              title="Должно быть более 8 символов, включая цифры, строчные буквы, заглавные буквы"
-              placeholder="Введите пароль"
-              required
-            />
-            {passwordError && (
-              <ul className="mt-2 text-sm">
-                <span className="text-error text-sm">{passwordError}</span>
-                <li
-                  className={`flex items-center ${passwordRequirements.length ? "text-success" : "text-error"}`}
-                >
-                  {passwordRequirements.length ? "✓" : "•"} Минимум 8 символов
-                </li>
-                <li
-                  className={`flex items-center ${passwordRequirements.number ? "text-success" : "text-error"}`}
-                >
-                  {passwordRequirements.number ? "✓" : "•"} Хотя бы одна цифра
-                </li>
-                <li
-                  className={`flex items-center ${passwordRequirements.lowercase ? "text-success" : "text-error"}`}
-                >
-                  {passwordRequirements.lowercase ? "✓" : "•"} Хотя бы одна
-                  строчная буква
-                </li>
-                <li
-                  className={`flex items-center ${passwordRequirements.uppercase ? "text-success" : "text-error"}`}
-                >
-                  {passwordRequirements.uppercase ? "✓" : "•"} Хотя бы одна
-                  заглавная буква
-                </li>
-              </ul>
-            )}
+        )}
+
+        {errorMessage && (
+          <div className="alert alert-error">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="stroke-current shrink-0 h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <span>{errorMessage}</span>
           </div>
-          <button className="btn btn-primary w-full">Войти</button>
+        )}
+
+        <div className="form-control">
+          <label className="label mb-1.5">
+            <span className="label-text text-primary font-medium">Email</span>
+          </label>
+          <input
+            className={`input input-bordered w-full ${emailError ? "input-error" : ""}`}
+            type="email"
+            value={email}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setEmailError("");
+              setErrorMessage("");
+            }}
+            onBlur={validateEmail}
+            placeholder="mail@example.com"
+            required
+          />
+          {emailError && (
+            <span className="label-text-alt text-error mt-1">{emailError}</span>
+          )}
         </div>
-      </form>
-      <p className="text-center text-base">
-        У вас нет учетной записи?{" "}
+
+        <div className="form-control">
+          <label className="label mb-1.5">
+            <span className="label-text text-primary font-medium">Пароль</span>
+          </label>
+          <input
+            className={`input input-bordered w-full ${passwordError ? "input-error" : ""}`}
+            type="password"
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setPasswordError("");
+              setErrorMessage("");
+            }}
+            onBlur={validatePassword}
+            placeholder="Введите пароль"
+            required
+          />
+          {passwordError && (
+            <span className="label-text-alt text-error mt-1">
+              {passwordError}
+            </span>
+          )}
+        </div>
+
         <button
-          className="btn-link font-bold cursor-pointer hover:text-primary transition-all text-base-content"
-          onClick={() => dispatch(toggleAuth())}
+          type="submit"
+          className={`btn btn-primary w-full ${isLoading ? "loading" : ""}`}
+          disabled={isLoading}
         >
-          Зарегистрируйтесь
+          {isLoading ? "Вход..." : "Войти"}
         </button>
-      </p>
+      </form>
+
+      <div className="text-center mt-6">
+        <p className="text-sm">
+          Нет учетной записи?{" "}
+          <button
+            onClick={() => dispatch(toggleAuth())}
+            className="link link-primary font-bold"
+          >
+            Зарегистрируйтесь
+          </button>
+        </p>
+      </div>
     </div>
   );
 }
