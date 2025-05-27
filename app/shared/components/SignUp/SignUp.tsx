@@ -1,6 +1,9 @@
 import { toggleAuth } from "@app/store/Slice/authSlice";
 import React, { useState } from "react";
 import { useDispatch } from "react-redux";
+import axios from "axios";
+import Success from "@app/shared/icons/Success";
+import Error from "@app/shared/icons/Error";
 
 export default function SignUp() {
   const dispatch = useDispatch();
@@ -18,6 +21,8 @@ export default function SignUp() {
     lowercase: false,
     uppercase: false,
   });
+  const [successMessage, setSuccessMessage] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
 
   const validateUsername = () => {
     if (username.length > 0) {
@@ -96,11 +101,63 @@ export default function SignUp() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const isPasswordValid = validateConfirmPassword();
-    if (!isPasswordValid) {
+    setErrorMessage("");
+    setSuccessMessage("");
+
+    const isUsernameValid = validateUsername();
+    const isEmailValid = validateEmail();
+    const isPasswordValid = validatePassword();
+    const isConfirmPasswordValid = validateConfirmPassword();
+
+    if (
+      !isUsernameValid ||
+      !isEmailValid ||
+      !isPasswordValid ||
+      !isConfirmPasswordValid
+    ) {
       return;
+    }
+
+    try {
+      const response = await axios.post("/api/auth/register", {
+        username,
+        email,
+        password,
+        role: "user",
+      });
+
+      setErrorMessage("");
+      setSuccessMessage("Регистрация прошла успешно! Теперь вы можете войти.");
+
+      setTimeout(() => {
+        dispatch(toggleAuth());
+      }, 3000);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (
+          error.response?.status === 400 &&
+          error.response.data.message.includes("уже существует")
+        ) {
+          if (error.response.data.message.includes("email")) {
+            setEmailError("Пользователь с таким email уже зарегистрирован");
+          } else if (error.response.data.message.includes("username")) {
+            setUserNameError("Пользователь с таким именем уже зарегистрирован");
+          }
+
+          setErrorMessage("Ошибка при регестрации");
+        } else {
+          setErrorMessage(
+            error.response?.data?.message || "Ошибка при регистрации"
+          );
+        }
+      } else {
+        setErrorMessage("Ошибка соединения с сервером");
+        console.error("Registration error:", error);
+      }
+
+      setSuccessMessage("");
     }
   };
   return (
@@ -109,6 +166,18 @@ export default function SignUp() {
         <h3 className="text-lg p-4 font-bold text-center text-primary">
           Пожалуйста, заполните форму для регистрации!
         </h3>
+        {successMessage && (
+          <div className="alert alert-success">
+            <Success />
+            <span>{successMessage}</span>
+          </div>
+        )}
+        {errorMessage && (
+          <div className="alert alert-error mb-4">
+            <Error />
+            <span>{errorMessage}</span>
+          </div>
+        )}
         <div className="space-y-4 py-8">
           <div className="form-control">
             <label className="label text-primary font-medium mb-2">
